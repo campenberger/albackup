@@ -1,5 +1,7 @@
-- Fixes view import order
+- Create app around with two modes
+- Fix logging
 - Make DB parameteres configurable
 - Restore for reporting DB must not turn on RI checking
+- Use correct dependencies on test host
 - Test with all databases
 - Regression test an instance

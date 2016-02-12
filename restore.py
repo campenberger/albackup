@@ -4,6 +4,8 @@ import os
 from sqlalchemy.util import pickle,byte_buffer
 from sqlalchemy.dialects.mssql import NTEXT
 
+from albackup import ObjectDef
+
 backup_dir='backup'
 
 db_user='sa'
@@ -43,7 +45,8 @@ def _import_object(con,check_and_delete,objs):
 		logger.debug('Recreating object %s',v[0])
 		trans=con.begin()
 		try:
-			con.execute(check_and_delete % (v[0],v[0]))
+			if check_and_delete:
+				con.execute(check_and_delete % (v[0],v[0]))
 			con.execute(v[1])
 
 			trans.commit()
@@ -53,11 +56,7 @@ def _import_object(con,check_and_delete,objs):
 
 
 def import_views(view_defs,con):
-	_import_object(
-		con,
-		"IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.VIEWS WHERE table_name= '%s') DROP VIEW %s",
-		view_defs
-	)
+	_import_object(con, 	None, view_defs)
 
 def import_procedures(objs,con):
 	_import_object(
@@ -82,6 +81,12 @@ def import_triggers(objs,con):
 			"drop trigger %s",
 		objs
 	)	
+
+def drop_views(views,con):
+	_getLogger('drop_views').info('Dropping views')
+	for v in reversed(views):
+		con.execute("IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.VIEWS WHERE table_name= '%s') DROP VIEW %s" % (v.name,v.name))
+
 
 logging.basicConfig(level=logging.DEBUG)
 #logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
@@ -115,9 +120,13 @@ for tab in meta.tables:
 			suspect_columns["%s.%s" % (tab, col.name)]=True
 
 # creating the schema
-logger.info('Re-creating tables ....')
+trans=con.begin()
+drop_views(backup_info['views'],con)
+logger.info("Deleteing tables ....")
 meta.drop_all(con)
+logger.info('Re-creating tables ....')
 meta.create_all(con)
+trans.commit()
 
 # turn of RI checks
 logger.info('Turn off RI checks')
