@@ -1,0 +1,5 @@
+- Fixes view import order
+- Make DB parameteres configurable
+- Restore for reporting DB must not turn on RI checking
+- Test with all databases
+- Regression test an instance

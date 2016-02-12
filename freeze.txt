@@ -1,0 +1,3 @@
+SQLAlchemy==1.0.11
+pytz==2015.7
+pyodbc==3.0.10
