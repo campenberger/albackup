@@ -20,7 +20,7 @@ db_port=1433
 # db_name='stuyvesant'
 db_name='reporting'
 
-_getLogger=loggerFactory('dump')
+_getLogger=loggerFactory('Dump')
 
 class Dump(DumpRestoreBase):
 
@@ -33,7 +33,7 @@ class Dump(DumpRestoreBase):
 
 
 	def get_meta_data(self):
-		logger=_getLogger('Dump','get_meta_data')
+		logger=_getLogger('get_meta_data')
 		pickle_name=os.path.join(self.meta_data_dir,'{}.pickle'.format(db_name))
 		if os.path.exists(pickle_name):
 			meta=pickle.load(open(pickle_name,'rb'))
@@ -50,7 +50,7 @@ class Dump(DumpRestoreBase):
 		return meta
 
  	def backup_tables(self,):
-		logger=_getLogger('Dump','backup_tables')
+		logger=_getLogger('backup_tables')
 		meta=self.info['meta']
 
 		for (table_name,table) in meta.tables.iteritems():
@@ -81,7 +81,7 @@ class Dump(DumpRestoreBase):
 
 
 	def _get_object_definitions(self,sql):
-		logger=_getLogger('Dump','_get_object_definitions')
+		logger=_getLogger('_get_object_definitions')
 		logger.debug('Getting all object names from %s',sql)
 
 		with transaction(con):
@@ -104,7 +104,7 @@ class Dump(DumpRestoreBase):
 				return res.fetchall()
 
 	def get_views(self):
-		logger=_getLogger('Dump','get_views')
+		logger=_getLogger('get_views')
 		logger.info('Retrieving all views')
 
 		views=self._get_object_definitions("select o.name from sysobjects o where type='V';" )
@@ -147,7 +147,7 @@ class Dump(DumpRestoreBase):
 		return ordered_views
 
 	def get_procedures(self):
-		logger=_getLogger('Dump','get_procedures')
+		logger=_getLogger('get_procedures')
 		logger.info('Retrieving all procuedures')
 		self.info['procuedures']=self._get_object_definitions(
 			"select routine_name from information_schema.routines where routine_schema='dbo' and routine_type='PROCEDURE'"
@@ -156,7 +156,7 @@ class Dump(DumpRestoreBase):
 
 
 	def get_functions(self):
-		logger=_getLogger('Dump','get_functions')
+		logger=_getLogger('get_functions')
 		logger.info('Retrieving all functions')
 		self.info['functions']=self._get_object_definitions(
 			"select routine_name from information_schema.routines where routine_schema='dbo' and routine_type='FUNCTION'"
@@ -164,13 +164,13 @@ class Dump(DumpRestoreBase):
 		return self.info['functions']
 
 	def get_triggers(self):
-		logger=_getLogger('Dump','get_triggers')
+		logger=_getLogger('get_triggers')
 		logger.info('Retrieving all triggers')
 		self.info['triggers']=self._get_object_definitions("select o.name from sysobjects o where type='TR';" )	
 		return self.info['triggers']
 
 	def finsih_backup(self):
-		logger=_getLogger('Dump','finsih_backup')
+		logger=_getLogger('finsih_backup')
 		self.info['finished']=datetime.now(pytz.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')
 		file_name=os.path.join(self.backup_dir,'_metadata.pickle')
 		with open(file_name,'wb') as fh:
