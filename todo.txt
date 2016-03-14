@@ -1,7 +1,41 @@
 - Create app around with two modes
+	- parameters in config file
+	- with encrypted password
+	- explicit allow_restore parameter
+	- Flag Restore for reporting DB must not turn on RI checking
+	- sample files for dump & restore
+
 - Fix logging
-- Make DB parameteres configurable
-- Restore for reporting DB must not turn on RI checking
-- Use correct dependencies on test host
+- Recreate test host
+
 - Test with all databases
 - Regression test an instance
+- compression into an archive
+- option for meta data chaching
+
+
+Diffing the schema with SQLWorkbench/J
+	WbSchemaDiff -referenceProfile=reporting -targetProfile=camtest -file=diff.xml -includeIndex=true -includeProcedures=true -includeSequences=true -includeTableGrants=true;
+
+	WbXslt -inputfile=diff.xml -stylesheet=xslt/wbdiff2html.xslt -xsltoutput=diff.html;
+
+Installing unixODBC & freeTDS
+	wget ftp://ftp.unixodbc.org/pub/unixODBC/unixODBC-2.3.4.tar.gz
+	tar xvfz unixODBC-2.3.4.tar.gz
+	cd unixODBC-2.3.4
+	./configure --enable-gui=no --enable-drivers=no --enable-iconv --with-iconv-char-enc=UTF8 --with-iconv-ucode-enc=UTF16LE --libdir=/usr/lib/x86_64-linux-gnu --prefix=/usr --sysconfdir=/etc
+	make
+	sudo make install
+
+	wget ftp://ftp.freetds.org/pub/freetds/current/freetds-dev.0.99.134.tar.gz
+	tar xvf freetds-dev.0.99.134.tar.gz
+	cd freetds-0.99.134/
+	./configure --with-tdsver=7.4 --with-unixodbc=/usr/local
+	make
+	sudo make install
+
+	update /usr/local/etc/odbcinst.ini
+
+
+	sudo apt-get install libffi-dev
+	sudo pip install -U pyopenssl ndg-httpsclient pyasn1

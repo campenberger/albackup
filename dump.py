@@ -41,7 +41,7 @@ class Dump(DumpRestoreBase):
 		else:
 			logger.info('Reflecting the database meta data - this will take some time...')
 			meta=sa.MetaData()
-			meta.reflect(bind=engine)
+			meta.reflect(bind=self.engine)
 			logger.info('Reflected database')
 			pickle.dump(meta, open(pickle_name,'wb'))
 			logger.info('Refelected metadata chached in %s',pickle_name)
@@ -57,8 +57,8 @@ class Dump(DumpRestoreBase):
 			file_name=os.path.join(self.backup_dir,'{}.pickle'.format(table_name))
 
 			logger.info('Fetch data from %s',table_name) 
-			with transaction(con):
-				res=con.execute(table.select())
+			with transaction(self.con):
+				res=self.con.execute(table.select())
 
 				with open(file_name,'wb') as fh:
 					rows=res.fetchmany(BLOCK_SIZE)
@@ -84,14 +84,14 @@ class Dump(DumpRestoreBase):
 		logger=_getLogger('_get_object_definitions')
 		logger.debug('Getting all object names from %s',sql)
 
-		with transaction(con):
+		with transaction(self.con):
 			with execute_resultset(self.con, sql) as res:
 				names=[ r[0] for r in res.fetchall() ]
 
 			ret=[]
 			for v in names:
 				logger.debug('Fetching defintion of %s',v)
-				with execute_resultset(con, "exec sp_helptext '%s'" % v ) as res:
+				with execute_resultset(self.con, "exec sp_helptext '%s'" % v ) as res:
 					vdef=''.join( [r[0] for r in res.fetchall()] )
 					ret.append( ObjectDef(v,vdef,None) )
 		return ret
@@ -149,10 +149,10 @@ class Dump(DumpRestoreBase):
 	def get_procedures(self):
 		logger=_getLogger('get_procedures')
 		logger.info('Retrieving all procuedures')
-		self.info['procuedures']=self._get_object_definitions(
+		self.info['procedures']=self._get_object_definitions(
 			"select routine_name from information_schema.routines where routine_schema='dbo' and routine_type='PROCEDURE'"
 		)
-		return self.info['procuedures']
+		return self.info['procedures']
 
 
 	def get_functions(self):
@@ -187,7 +187,6 @@ logger=logging.getLogger()
 engine=sa.create_engine('mssql+pyodbc://{}:{}@{}:{}/{}?driver=FreeTDS&odbc_options="TDS_Version=8.0"'.format(
 	db_user,db_password,db_server,db_port,db_name
 ),deprecate_large_types=True)
-con=engine.connect()
 
 dump=Dump('backup','.',engine)
 

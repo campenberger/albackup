@@ -21,8 +21,8 @@ def transaction(con):
 		yield
 		trans.commit()
 	except:
-		trans.rollback()
 		getLogger('transaction').exception('Exception in transaction - rolling back')
+		trans.rollback()
 		raise
 
 @contextmanager
@@ -38,6 +38,7 @@ class DumpRestoreBase(object):
 		self.backup_dir=backup_dir
 		self.engine=engine
 		self.con=engine.connect()
+		getLogger('DumpRestoreBase').debug('Connected to database')
 		self.info={
 			'started': datetime.now(pytz.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')		
 		}

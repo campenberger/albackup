@@ -1,10 +1,11 @@
 import logging
 import sqlalchemy as sa
 import os
+import re
 from sqlalchemy.util import pickle,byte_buffer
 from sqlalchemy.dialects.mssql import NTEXT
 
-from albackup import ObjectDef
+from albackup import ObjectDef,DumpRestoreBase,loggerFactory,transaction
 
 backup_dir='backup'
 
@@ -15,138 +16,140 @@ db_port=1433
 db_name='cam_test'
 
 
-_getLogger=logging.getLogger
+_getLogger=loggerFactory('restore')
 
-def import_tables(meta,backup_dir,con):
-	logger=_getLogger('import_tables')
-	for (table_name,table) in meta.tables.iteritems():
-		file_name=os.path.join(backup_dir,'{}.pickle'.format(table_name))
+class Restore(DumpRestoreBase):
 
-		logger.info('Restore data for table %s from %s',table_name,file_name)
-		trans = con.begin()
+	def __init__(self,backup_dir,engine):
+		super(Restore,self).__init__(backup_dir,engine)
+
+		file_name=os.path.join(backup_dir,'_metadata.pickle')
 		with open(file_name,'rb') as fh:
-			l=fh.readline()
-			while l and l!='EOF':
-				l=int(l)
-				print "Blocksize: %d" % l
-
-				buf=fh.read(l)
-				rows=pickle.loads(buf)
-				# for row in rows:
-				con.execute(table.insert(),rows)
-
-				l=fh.readline()  
-		#trans.rollback()
-		trans.commit()
-
-def _import_object(con,check_and_delete,objs):
-	logger=_getLogger('_import_object')
-	for v in objs:
-		logger.debug('Recreating object %s',v[0])
-		trans=con.begin()
-		try:
-			if check_and_delete:
-				con.execute(check_and_delete % (v[0],v[0]))
-			con.execute(v[1])
-
-			trans.commit()
-		except:
-			# trans.rollback()
-			raise
+			self.info=pickle.load(fh)
+			_getLogger('Restore').info('Meta data read from %s',file_name)
 
 
-def import_views(view_defs,con):
-	_import_object(con, 	None, view_defs)
+	def fixTextColumns(self):
+		logger=_getLogger('fixTextColumns')
+		self.suspect_columns={}
+		for tab in self.meta.tables:
+			table=self.meta.tables[tab]
+			for col in table.columns:
+				if isinstance(col.type, sa.TEXT):
+					table.columns[col.name].type=sa.TEXT(collation=u'SQL_Latin1_General_CP1_CI_AS')
+					self.suspect_columns["%s.%s" % (tab, col.name)]=True
+					logger.debug('Correctd column %s.%s',tab,col.name)
 
-def import_procedures(objs,con):
-	_import_object(
-		con,
-		"if exists (select * from information_schema.routines where routine_schema='dbo' and routine_type='PROCEDURE' and routine_name='%s')"+\
-			"drop procedure %s",
-		objs
-	)
+				elif isinstance(col.type, NTEXT):
+					table.columns[col.name].type=NTEXT()
+					self.suspect_columns["%s.%s" % (tab, col.name)]=True
+					logger.debug('Correctd column %s.%s',tab,col.name)
 
-def import_functions(objs,con):
-	_import_object(
-		con,
-		"if exists (select * from information_schema.routines where routine_schema='dbo' and routine_type='FUNCTION' and routine_name='%s')"+\
-			"drop function %s",
-		objs
-	)	
+	def createSchema(self):
+		logger=_getLogger('createSchema')
+		with transaction(self.con):
+			self._drop_views()
 
-def import_triggers(objs,con):
-	_import_object(
-		con,
-		"if exists (select * from sysobjects o where type='TR' and type='%s')"+\
-			"drop trigger %s",
-		objs
-	)	
+			logger.info("Deleteing tables ....")
+			self.meta.drop_all(self.con)
 
-def drop_views(views,con):
-	_getLogger('drop_views').info('Dropping views')
-	for v in reversed(views):
-		con.execute("IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.VIEWS WHERE table_name= '%s') DROP VIEW %s" % (v.name,v.name))
+			logger.info('Re-creating tables ....')
+			self.meta.create_all(self.con)
+
+	def changeRIChecks(self,off):
+		logger=_getLogger('turnOffRIChecks')
+		with transaction(self.con):
+			if off:
+				logger.info('Turn off RI checks')
+				self.con.execute('EXEC sp_msforeachtable "ALTER TABLE ? NOCHECK CONSTRAINT all"')
+			else:
+				logger.info('Turn on RI checks')
+				self.con.execute('EXEC sp_msforeachtable "ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all"')
+
+
+	def _drop_views(self):
+		_getLogger('_drop_views').info('Dropping views')
+		for v in reversed(self.views):
+			self.con.execute("IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.VIEWS WHERE table_name= '%s') DROP VIEW %s" % (v.name,v.name))
+
+
+	def import_tables(self):
+		logger=_getLogger('import_tables')
+		logger.info('Importing tables')
+		for (table_name,table) in self.meta.tables.iteritems():
+			file_name=os.path.join(self.backup_dir,'{}.pickle'.format(table_name))
+
+			logger.info('Restore data for table %s from %s',table_name,file_name)
+			with open(file_name,'rb') as fh:
+				l=fh.readline()
+				while l and l!='EOF':
+					l=int(l)
+					logger.debug('Importing block with %d bytes', l)
+
+					buf=fh.read(l)
+					rows=pickle.loads(buf)
+					with transaction(self.con):
+						self.con.execute(table.insert(),rows)
+
+					l=fh.readline()  
+
+	def import_objects(self):
+		logger=_getLogger('import_objects')
+		objects=(
+			(self.views,		None,	"Views"),
+			
+			(self.procedures, 	"if exists (select * from information_schema.routines where routine_schema='dbo' "+\
+				"and routine_type='PROCEDURE' and routine_name='%s') "+\
+				"drop procedure %s",
+				"Procedures"
+			),
+			
+			(self.functions,	"if exists (select * from information_schema.routines where routine_schema='dbo' "+\
+				"and routine_type='FUNCTION' and routine_name='%s') "+\
+				"drop function %s",
+				"Functions"
+			),
+			
+			(self.triggers,		"if exists (select * from sysobjects o where type='TR' and type='%s')"+\
+				"drop trigger %s",
+				"Triggers"
+			)
+		)
+		for obj in objects:
+			logger.info('Importing %s',obj[2])
+			self._import_object(obj[1],obj[0])
+
+
+
+	def _import_object(self,check_and_delete,objs):
+		logger=_getLogger('_import_object')
+		crappy_backslash=re.compile(r'(\[.*?)\x92(.*?])')
+		for v in objs:
+			logger.debug('Recreating object %s',v[0])
+			with transaction(self.con):
+				if check_and_delete:
+					self.con.execute(check_and_delete % (v[0],v[0]))
+
+				sql=v[1]
+				self.con.execute(sql)
 
 
 logging.basicConfig(level=logging.DEBUG)
-#logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
-logger=logging.getLogger()
+logging.getLogger('sqlalchemy.engine').setLevel(logging.ERROR)
+# logger=logging.getLogger()
 
 
 engine=sa.create_engine('mssql+pyodbc://{}:{}@{}:{}/{}?driver=FreeTDS&odbc_options="TDS_Version=8.0"'.format(
 	db_user,db_password,db_server,db_port,db_name
 ),deprecate_large_types=True)
-con=engine.connect()
-logger.info('Connected to %s',db_name)
+_getLogger().info('Connected to %s',db_name)
 
-# read the meta data
-file_name=os.path.join(backup_dir,'_metadata.pickle')
-with open(file_name,'rb') as fh:
-	backup_info=pickle.load(fh)
-	logger.info('Meta data red from %s',file_name)
-meta=backup_info['meta']
 
-# do suergery on the text columns
-suspect_columns={}
-for tab in meta.tables:
-	table=meta.tables[tab]
-	for col in table.columns:
-		if isinstance(col.type, sa.TEXT):
-			table.columns[col.name].type=sa.TEXT(collation=u'SQL_Latin1_General_CP1_CI_AS')
-			suspect_columns["%s.%s" % (tab, col.name)]=True
+restore=Restore(backup_dir,engine)
+restore.fixTextColumns()
+restore.createSchema()
+restore.changeRIChecks(off=True)
+restore.import_tables()
+restore.import_objects()
+restore.changeRIChecks(off=False)
 
-		elif isinstance(col.type, NTEXT):
-			table.columns[col.name].type=NTEXT()
-			suspect_columns["%s.%s" % (tab, col.name)]=True
-
-# creating the schema
-trans=con.begin()
-drop_views(backup_info['views'],con)
-logger.info("Deleteing tables ....")
-meta.drop_all(con)
-logger.info('Re-creating tables ....')
-meta.create_all(con)
-trans.commit()
-
-# turn of RI checks
-logger.info('Turn off RI checks')
-trans = con.begin()
-con.execute('EXEC sp_msforeachtable "ALTER TABLE ? NOCHECK CONSTRAINT all"')
-trans.commit()
-
-# import data from all tables, incl warning if max data length is exceeded
-logger.info('Restoring tables....')
-import_tables(meta,backup_dir,con)
-
-# re-create all the views
-logger.info('Recreating views...')
-import_views(backup_info['views'],con)
-import_procedures(backup_info['procedures'],con)
-import_functions(backup_info['functions'],con)
-import_triggers(backup_info['triggers'],con)
-
-# turn RI checking back on
-logger.info('Turn RI checks back on')
-trans = con.begin()
-con.execute('EXEC sp_msforeachtable "ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all"')
-trans.commit()
