@@ -8,43 +8,47 @@ from sqlalchemy.sql import func
 from collections import namedtuple
 from sqlalchemy.util import pickle,byte_buffer
 
-from albackup import ObjectDef,loggerFactory,transaction,execute_resultset,DumpRestoreBase
+from . import ObjectDef,loggerFactory,transaction,execute_resultset,DumpRestoreBase
 
 BLOCK_SIZE=500
-
-
-db_user='sa'
-db_password='gQjrrdp7iK8jvcME'
-db_server='rds-td-stage.lexington-solutions.com'
-db_port=1433
-# db_name='stuyvesant'
-db_name='reporting'
 
 _getLogger=loggerFactory('Dump')
 
 class Dump(DumpRestoreBase):
 
-	def __init__(self,backup_dir,meta_data_dir,engine):
+	def __init__(self,backup_dir,meta_data_dir,engine,db_name,db_server):
 		super(Dump,self).__init__(backup_dir,engine)
 		self.meta_data_dir=meta_data_dir
+		self.db_name=db_name
+		self.db_server=db_server
+
+		self.backup_dir=os.path.join(
+			backup_dir if backup_dir else '.',
+			'{}@{}-{}'.format(db_name,db_server,datetime.utcnow().strftime('%Y%m%d-%H%M'))
+		)
 		if not os.path.exists(self.backup_dir):
-			os.mkdir(self.backup_dir)
+			os.makedirs(self.backup_dir)
 			_getLogger('Dump').info('Backup dir %s created',backup_dir)
 
 
 	def get_meta_data(self):
 		logger=_getLogger('get_meta_data')
-		pickle_name=os.path.join(self.meta_data_dir,'{}.pickle'.format(db_name))
-		if os.path.exists(pickle_name):
-			meta=pickle.load(open(pickle_name,'rb'))
-			logger.info('Got reflected metadata read from %s',pickle_name)
-		else:
+		meta=None
+		pickle_name=None
+		if self.meta_data_dir:
+			pickle_name=os.path.join(self.meta_data_dir,'{}@{}.pickle'.format(self.db_name,self.db_server))
+			if os.path.exists(pickle_name):
+				meta=pickle.load(open(pickle_name,'rb'))
+				logger.info('Got reflected metadata read from %s',pickle_name)
+
+		if meta is None:
 			logger.info('Reflecting the database meta data - this will take some time...')
 			meta=sa.MetaData()
 			meta.reflect(bind=self.engine)
 			logger.info('Reflected database')
-			pickle.dump(meta, open(pickle_name,'wb'))
-			logger.info('Refelected metadata chached in %s',pickle_name)
+			if pickle_name:
+				pickle.dump(meta, open(pickle_name,'wb'))
+				logger.info('Refelected metadata chached in %s',pickle_name)
 
 		self.info['meta']=meta
 		return meta
@@ -177,24 +181,3 @@ class Dump(DumpRestoreBase):
 			pickle.dump(self.info,fh)
 		logger.info('Meta data written to %s',file_name)
 
-
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger('sqlalchemy.engine').setLevel(logging.ERROR)
-logger=logging.getLogger()
-
-
-# engine=sa.create_engine('mssql+pyodbc://{}:{}@{}'.format(db_user,db_password,dsn_name))
-engine=sa.create_engine('mssql+pyodbc://{}:{}@{}:{}/{}?driver=FreeTDS&odbc_options="TDS_Version=8.0"'.format(
-	db_user,db_password,db_server,db_port,db_name
-),deprecate_large_types=True)
-
-dump=Dump('backup','.',engine)
-
-dump.get_meta_data()
-dump.backup_tables()
-dump.get_views()
-dump.get_procedures()
-dump.get_functions()
-dump.get_triggers()
-
-dump.finsih_backup()

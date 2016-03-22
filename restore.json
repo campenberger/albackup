@@ -1,0 +1,8 @@
+{	"db_user": 			"sa",
+	"db_password": 		"gQjrrdp7iK8jvcME",
+	"db_server":		"rds-td-stage.lexington-solutions.com",
+	"db_port":			1433,
+	"db_name": 			"cam_test",
+	"allow_restore":	true,
+	"enable_ri_check":	false
+}
