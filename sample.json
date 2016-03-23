@@ -1,0 +1,22 @@
+// IMPORTANT: JSON files can't contain comments, so you need to remove
+// them all, before using the file
+{	"db_user": 			"<replace with database user name>",
+
+	// leave the password null and use the tool in the chg-password mode
+	// to set the encrypted database password
+	"db_password": 		null,
+
+	"db_server":		"<replace with IP or FQDN of database server>",
+
+	"db_port":			1433,
+
+	"db_name": 			"<replace with target database for backup or restore>",
+
+	// set to yes to allow restoring to the database, only do this when you
+	// are absolutely sure you have the right database
+	"allow_restore":	false,
+
+	// enable the referential integrity check at the end of the restore. Set
+	// this to false, for reporting databases
+	"enable_ri_check":	true
+}

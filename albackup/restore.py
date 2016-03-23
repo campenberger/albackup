@@ -5,15 +5,8 @@ import re
 from sqlalchemy.util import pickle,byte_buffer
 from sqlalchemy.dialects.mssql import NTEXT
 
-from albackup import ObjectDef,DumpRestoreBase,loggerFactory,transaction
+from . import ObjectDef,DumpRestoreBase,loggerFactory,transaction
 
-backup_dir='backup'
-
-db_user='sa'
-db_password='gQjrrdp7iK8jvcME'
-db_server='rds-td-stage.lexington-solutions.com'
-db_port=1433
-db_name='cam_test'
 
 
 _getLogger=loggerFactory('restore')
@@ -23,7 +16,7 @@ class Restore(DumpRestoreBase):
 	def __init__(self,backup_dir,engine):
 		super(Restore,self).__init__(backup_dir,engine)
 
-		file_name=os.path.join(backup_dir,'_metadata.pickle')
+		file_name=os.path.join(self.backup_dir,'_metadata.pickle')
 		with open(file_name,'rb') as fh:
 			self.info=pickle.load(fh)
 			_getLogger('Restore').info('Meta data read from %s',file_name)
@@ -50,7 +43,7 @@ class Restore(DumpRestoreBase):
 		with transaction(self.con):
 			self._drop_views()
 
-			logger.info("Deleteing tables ....")
+			logger.info("Deleting tables ....")
 			self.meta.drop_all(self.con)
 
 			logger.info('Re-creating tables ....')
@@ -79,7 +72,8 @@ class Restore(DumpRestoreBase):
 		for (table_name,table) in self.meta.tables.iteritems():
 			file_name=os.path.join(self.backup_dir,'{}.pickle'.format(table_name))
 
-			logger.info('Restore data for table %s from %s',table_name,file_name)
+			logger.info('Restore data for table %s',table_name)
+			logger.debug('   reading content from %s',file_name)
 			with open(file_name,'rb') as fh:
 				l=fh.readline()
 				while l and l!='EOF':
@@ -134,22 +128,6 @@ class Restore(DumpRestoreBase):
 				self.con.execute(sql)
 
 
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger('sqlalchemy.engine').setLevel(logging.ERROR)
-# logger=logging.getLogger()
 
 
-engine=sa.create_engine('mssql+pyodbc://{}:{}@{}:{}/{}?driver=FreeTDS&odbc_options="TDS_Version=8.0"'.format(
-	db_user,db_password,db_server,db_port,db_name
-),deprecate_large_types=True)
-_getLogger().info('Connected to %s',db_name)
-
-
-restore=Restore(backup_dir,engine)
-restore.fixTextColumns()
-restore.createSchema()
-restore.changeRIChecks(off=True)
-restore.import_tables()
-restore.import_objects()
-restore.changeRIChecks(off=False)
 

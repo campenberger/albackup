@@ -1,9 +1,3 @@
-- Create app around with two modes
-	- parameters in config file
-	- with encrypted password
-	- explicit allow_restore parameter
-	- Flag Restore for reporting DB must not turn on RI checking
-	- sample files for dump & restore
 
 - Fix logging
 - Recreate test host
