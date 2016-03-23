@@ -94,10 +94,16 @@ if __name__ == '__main__':
 	parser.add_argument('--cfg','-c',dest='cfg_file',default='albackup.json', help="Configuration for dump or restore operation")
 	parser.add_argument('--meta-cache',default=None, help="Allow caching of database meta data")
 	parser.add_argument('--backup-dir',default='backup',help="Target directory for backups")
+	parser.add_argument('--debug','-d',action="store_true",default=False,help="Run in debug mode")
 	args=parser.parse_args()
 
-	logging.basicConfig(level=logging.INFO)
-	logging.getLogger('sqlalchemy.engine').setLevel(logging.ERROR)
+	logging.basicConfig(
+		level=logging.DEBUG if args.debug else logging.INFO,
+		format="%(asctime)s:%(name)-20s:%(levelname)-7s:%(message)s" if args.debug else "%(asctime)s: %(message)s"
+	)
+	logging.getLogger('sqlalchemy.engine').setLevel(
+		logging.INFO if args.debug else logging.ERROR
+	)
 	logger=logging.getLogger()
 
 	cfg=None
