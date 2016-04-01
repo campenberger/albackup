@@ -180,4 +180,5 @@ class Dump(DumpRestoreBase):
 		with open(file_name,'wb') as fh:
 			pickle.dump(self.info,fh)
 		logger.info('Meta data written to %s',file_name)
+		
 

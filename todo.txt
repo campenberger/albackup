@@ -1,8 +1,10 @@
 
-- Fix logging
-- Recreate test host
-
 - Test with all databases
+	- json with test data
+	- Iterate over
+		- wipe restore target before each one
+	- run compare
+
 - Regression test an instance
 - compression into an archive
 - option for meta data chaching
