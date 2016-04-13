@@ -4,13 +4,14 @@ import argparse
 import sqlalchemy as sa
 import pyodbc
 
+from sqlalchemy.pool import NullPool
 from albackup import loggerFactory
 from albackup.dump import Dump
 from albackup.restore import Restore
 
 _getLogger=loggerFactory('test_all')
 
-def create_engine(cfg):
+def create_engine(cfg,**kwargs):
 	logger=_getLogger('create_engine')
 
 	logger.info('Database configuration:')
@@ -26,7 +27,7 @@ def create_engine(cfg):
 		cfg['db_server'],
 		cfg['db_port'],
 		cfg['db_name']
-	),deprecate_large_types=True)
+	),deprecate_large_types=True,**kwargs)
 
 
 class DatabaseRecreator(object):
@@ -87,50 +88,51 @@ recreator=DatabaseRecreator(cfg['restore'])
 
 
 # iterate over all configs
-for test_cfg in cfg['databases']:
-	logger.info('Starting Test for %s',test_cfg['name'])
-	engine=create_engine(test_cfg)
+for cur_cfg in cfg['databases']:
+	test_cfg={
+		'skip': False,
+		'enable_ri_check': True
+	}
+	test_cfg.update(cur_cfg)
 
-	# run dump
-	dump=Dump('./backup`', None, engine, test_cfg['db_name'], test_cfg['db_server'])
-	dump.get_meta_data()
-	dump.backup_tables()
-	dump.get_views()
-	dump.get_procedures()
-	dump.get_functions()
-	dump.get_triggers()
-	dump.finsih_backup()
-	logger.info('Dump finished. Backup in %s',dump.backup_dir)
-	engine.dispose()
-
-	# re-create database
-	recreator.recreate()
-
-	# now the restore
-	backup_dir=dump.backup_dir
-	engine=create_engine(cfg['restore'])
-	assert cfg['restore']['allow_restore']
-	enable_ri_check=cfg['restore']['enable_ri_check']
-			
-	restore=Restore(backup_dir,engine)
-	restore.fixTextColumns()
-	restore.createSchema()
-	restore.changeRIChecks(off=True)
-	restore.import_tables()
-	restore.import_objects()
-	if enable_ri_check:
-		restore.changeRIChecks(off=False)
+	if test_cfg['skip']:
+		logger.warn('Test for %s skipped',test_cfg['name'])
 	else:
-		logger.info('RI checks where left off')
-	logger.info('Restore finished')
-	engine.dispose()
+		logger.info('Starting Test for %s',test_cfg['name'])
+		engine=create_engine(test_cfg)
+
+		# run dump
+		dump=Dump('./backup', None, engine, test_cfg['db_name'], test_cfg['db_server'])
+		dump.run()
+		logger.info('Dump finished. Backup in %s',dump.backup_dir)
+		engine.dispose()
+
+		# re-create database
+		recreator.recreate()
+
+		# now the restore
+		backup_dir=dump.backup_dir
+		engine=create_engine(cfg['restore'],poolclass=NullPool)
+		assert cfg['restore']['allow_restore']
+		enable_ri_check=test_cfg['enable_ri_check']
+				
+		restore=Restore(backup_dir,engine)
+		restore.fixTextColumns()
+		restore.createSchema()
+		restore.changeRIChecks(off=True)
+		restore.import_tables()
+		restore.import_objects()
+		if enable_ri_check:
+			restore.changeRIChecks(off=False)
+		else:
+			logger.info('RI checks where left off')
+		logger.info('Restore finished')
+		restore.con.close()
+		engine.dispose()
 
 # databases to add
 # // sandbox
 # // sandbox-reporting
-# // astar
-# // astar-reporting
 # // astarstage
 # // astarstage-reporting
-# // td
 # // revere

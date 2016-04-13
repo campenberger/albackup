@@ -132,13 +132,7 @@ if __name__ == '__main__':
 
 	if args.mode=='dump':
 		dump=Dump(args.backup_dir, args.meta_cache, engine, cfg['db_name'], cfg['db_server'])
-		dump.get_meta_data()
-		dump.backup_tables()
-		dump.get_views()
-		dump.get_procedures()
-		dump.get_functions()
-		dump.get_triggers()
-		dump.finsih_backup()
+		dump.run()
 		logger.info('Dump finished')
 
 	elif args.mode=='restore':

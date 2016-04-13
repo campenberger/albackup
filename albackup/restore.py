@@ -83,7 +83,14 @@ class Restore(DumpRestoreBase):
 					buf=fh.read(l)
 					rows=pickle.loads(buf)
 					with transaction(self.con):
-						self.con.execute(table.insert(),rows)
+						try:
+							self.con.execute(table.insert(),rows)
+						except:
+							logger.exception("Error inserting rows into %s:",table_name)
+							logger.error("Dumping rows:")
+							for r in rows:
+								logger.error("   {}".format(r))
+							raise
 
 					l=fh.readline()  
 

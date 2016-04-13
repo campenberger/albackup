@@ -31,6 +31,15 @@ class Dump(DumpRestoreBase):
 			_getLogger('Dump').info('Backup dir %s created',backup_dir)
 
 
+	def run(self):
+		self.get_meta_data()
+		# dump.backup_tables()
+		self.get_procedures()
+		self.get_functions()
+		self.get_triggers()
+		self.get_views()
+		self.finsih_backup()
+
 	def get_meta_data(self):
 		logger=_getLogger('get_meta_data')
 		meta=None
@@ -128,8 +137,12 @@ class Dump(DumpRestoreBase):
 			logger.debug("   Got: %s",",".join(new_views[i].dependencies))
 
 
-		# sort the views, based on their dependencies
+		# create list of already predefined objects
 		already_defined={ name: table for (name,table) in self.meta.tables.iteritems() }
+		already_defined.update({ o.name: o for o in self.functions})
+		already_defined.update({ o.name: o for o in self.procedures})
+
+		# sort the views, based on their dependencies
 		ordered_views=[]
 		while len(new_views)>0:
 			logger.debug('Len new_views before: %d',len(new_views))
@@ -141,7 +154,20 @@ class Dump(DumpRestoreBase):
 				else:
 					remaining_views.append(view)
 			if len(new_views)==len(remaining_views):
-				raise Exception('No changes were made during ordering views')
+				msg='No changes were made during ordering views'
+				logger.error('No changes were made during ordering views')
+				logger.error('Remaining views:\n%s',"\n".join([
+					"%s: %s" % (
+						x.name,
+						",".join([y for y in x.dependencies])
+					) 
+					for x in remaining_views
+					])
+				)
+				logger.error('Already defined:\n%s',
+					'\n'.join(sorted(already_defined.keys()))
+				)
+				raise Exception(msg)
 			new_views=remaining_views
 			logger.debug('Len new_views after: %d',len(new_views))
 
@@ -180,5 +206,5 @@ class Dump(DumpRestoreBase):
 		with open(file_name,'wb') as fh:
 			pickle.dump(self.info,fh)
 		logger.info('Meta data written to %s',file_name)
-		
+
 
