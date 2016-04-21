@@ -21,6 +21,12 @@ class Restore(DumpRestoreBase):
 			self.info=pickle.load(fh)
 			_getLogger('Restore').info('Meta data read from %s',file_name)
 
+	def run(self):
+		self.fixTextColumns()
+		self.createSchema()
+		self.changeRIChecks(off=True)
+		self.import_tables()
+		self.import_objects()
 
 	def fixTextColumns(self):
 		logger=_getLogger('fixTextColumns')
@@ -74,14 +80,27 @@ class Restore(DumpRestoreBase):
 
 			logger.info('Restore data for table %s',table_name)
 			logger.debug('   reading content from %s',file_name)
+			cnt=100
 			with open(file_name,'rb') as fh:
 				l=fh.readline()
 				while l and l!='EOF':
 					l=int(l)
-					logger.debug('Importing block with %d bytes', l)
-
 					buf=fh.read(l)
 					rows=pickle.loads(buf)
+					logger.debug('Importing block with %d bytes and %d rows', l,len(rows))
+
+					# freetds seems to have a bug, where the odbc connection after a number
+					# of requests gets bad. So, we recyle the connection after a while
+					if cnt>=50:
+						logger.debug('Recyling connection')
+						con=self.con
+						self.con=self.engine.connect()
+						con.invalidate()
+						con.close()
+						cnt=0
+					else:
+						cnt=cnt+1
+
 					with transaction(self.con):
 						try:
 							self.con.execute(table.insert(),rows)
@@ -97,8 +116,6 @@ class Restore(DumpRestoreBase):
 	def import_objects(self):
 		logger=_getLogger('import_objects')
 		objects=(
-			(self.views,		None,	"Views"),
-			
 			(self.procedures, 	"if exists (select * from information_schema.routines where routine_schema='dbo' "+\
 				"and routine_type='PROCEDURE' and routine_name='%s') "+\
 				"drop procedure %s",
@@ -110,6 +127,8 @@ class Restore(DumpRestoreBase):
 				"drop function %s",
 				"Functions"
 			),
+
+			(self.views,		None,	"Views"),
 			
 			(self.triggers,		"if exists (select * from sysobjects o where type='TR' and type='%s')"+\
 				"drop trigger %s",

@@ -1,2 +1,4 @@
 *.pickle
 *.pyc
+*.sublime-project
+*.sublime-workspace

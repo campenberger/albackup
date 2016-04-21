@@ -1,13 +1,9 @@
-
 - Test with all databases
-	- json with test data
-	- Iterate over
-		- wipe restore target before each one
 	- run compare
-
 - Regression test an instance
+- Add a readme
 - compression into an archive
-- option for meta data chaching
+- built and unit test
 
 
 Diffing the schema with SQLWorkbench/J

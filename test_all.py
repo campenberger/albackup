@@ -8,6 +8,7 @@ from sqlalchemy.pool import NullPool
 from albackup import loggerFactory
 from albackup.dump import Dump
 from albackup.restore import Restore
+from albackup.compare import DbCompare
 
 _getLogger=loggerFactory('test_all')
 
@@ -60,13 +61,17 @@ class DatabaseRecreator(object):
 			self.con.execute('drop database {}'.format(self.db))	
 		c.close()
 
-		self.con.execute('create database {}'.format(self.db))
+		self.con.execute(
+			"create database {} on primary  (name={},filename='d:\\rdsdbdata\\data\\{}', size=100MB )"\
+			.format(self.db,self.db,self.db)
+		)
 		_getLogger('DatabaseRecreate').info('Database %s re-created',self.db)
 
 
 
 parser=argparse.ArgumentParser("Test prog to backup restore all databases and comparing them")
 parser.add_argument('--debug','-d',action="store_true",default=False,help="Run in debug mode")
+parser.add_argument('--sqlwb',action='store',default='../sqlworkbench',help='Location of the sqlworkbench tools')
 args=parser.parse_args()
 
 logging.basicConfig(
@@ -76,6 +81,7 @@ logging.basicConfig(
 logging.getLogger('sqlalchemy.engine').setLevel(
 	logging.INFO if args.debug else logging.ERROR
 )
+logging.getLogger('sh').setLevel(logging.ERROR)
 logger=_getLogger()
 
 # load test.json
@@ -117,11 +123,7 @@ for cur_cfg in cfg['databases']:
 		enable_ri_check=test_cfg['enable_ri_check']
 				
 		restore=Restore(backup_dir,engine)
-		restore.fixTextColumns()
-		restore.createSchema()
-		restore.changeRIChecks(off=True)
-		restore.import_tables()
-		restore.import_objects()
+		restore.run()
 		if enable_ri_check:
 			restore.changeRIChecks(off=False)
 		else:
@@ -129,6 +131,10 @@ for cur_cfg in cfg['databases']:
 		logger.info('Restore finished')
 		restore.con.close()
 		engine.dispose()
+
+		# compare the two
+		comp=DbCompare(test_cfg,test_cfg,args.sqlwb)
+		comp.run()
 
 # databases to add
 # // sandbox

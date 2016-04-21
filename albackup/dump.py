@@ -33,7 +33,7 @@ class Dump(DumpRestoreBase):
 
 	def run(self):
 		self.get_meta_data()
-		# dump.backup_tables()
+		self.backup_tables()
 		self.get_procedures()
 		self.get_functions()
 		self.get_triggers()
@@ -133,14 +133,14 @@ class Dump(DumpRestoreBase):
 				logger.error(msg)
 				raise Exception(msg)
 			
-			new_views.append( ObjectDef(view.name,view.defintion,map(lambda x: x[1],deps)) )
+			new_views.append( ObjectDef(view.name,view.defintion,map(lambda x: x[1].lower(),deps)) )
 			logger.debug("   Got: %s",",".join(new_views[i].dependencies))
 
 
 		# create list of already predefined objects
-		already_defined={ name: table for (name,table) in self.meta.tables.iteritems() }
-		already_defined.update({ o.name: o for o in self.functions})
-		already_defined.update({ o.name: o for o in self.procedures})
+		already_defined={ name.lower(): table for (name,table) in self.meta.tables.iteritems() }
+		already_defined.update({ o.name.lower(): o for o in self.functions})
+		already_defined.update({ o.name.lower(): o for o in self.procedures})
 
 		# sort the views, based on their dependencies
 		ordered_views=[]
@@ -149,7 +149,7 @@ class Dump(DumpRestoreBase):
 			remaining_views=[]
 			for view in new_views:
 				if all(map(lambda x: x in already_defined,view.dependencies)):
-					already_defined[view.name]=view
+					already_defined[view.name.lower()]=view
 					ordered_views.append(view)
 				else:
 					remaining_views.append(view)

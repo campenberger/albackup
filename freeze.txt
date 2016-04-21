@@ -2,3 +2,5 @@ SQLAlchemy==1.0.11
 pytz==2015.7
 pyodbc==3.0.10
 pycrypto==2.6.1
+Jinja2==2.8
+sh==1.11
