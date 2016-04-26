@@ -1,6 +1,7 @@
 - Test with all databases
 	- run compare
 - Regression test an instance
+- Document code
 - Add a readme
 - compression into an archive
 - built and unit test

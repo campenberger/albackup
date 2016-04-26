@@ -25,11 +25,16 @@ class DbCompare(object):
 	def _make_template(self):
 		template=jina_env.get_template(self.TEMPLATE)
 		self._sql_cmdfile=NamedTemporaryFile(mode="w+")
+		
+		cwd_dir=os.path.abspath(os.path.join(os.getcwd(),'diffs'))
+		if not os.path.exists(cwd_dir):
+			os.mkdir(cwd_dir)
+
 		context={
 			'ref': self.ref_cfg,
 			'target': self.target_cfg,
 			'sqlwb_dir': self.sqlwb_dir,
-			'cwd': os.path.abspath(os.getcwd())
+			'cwd': cwd_dir
 		}
 		print(template.render(context),file=self._sql_cmdfile)
 		self.logger.info('Compare command file rendered to %s',self._sql_cmdfile.name)

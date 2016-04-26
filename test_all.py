@@ -133,12 +133,6 @@ for cur_cfg in cfg['databases']:
 		engine.dispose()
 
 		# compare the two
-		comp=DbCompare(test_cfg,test_cfg,args.sqlwb)
+		comp=DbCompare(test_cfg,cfg['restore'],args.sqlwb)
 		comp.run()
 
-# databases to add
-# // sandbox
-# // sandbox-reporting
-# // astarstage
-# // astarstage-reporting
-# // revere

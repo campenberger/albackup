@@ -3,7 +3,7 @@ import sqlalchemy as sa
 import os
 import re
 from sqlalchemy.util import pickle,byte_buffer
-from sqlalchemy.dialects.mssql import NTEXT
+from sqlalchemy.dialects.mssql import NTEXT,NVARCHAR
 
 from . import ObjectDef,DumpRestoreBase,loggerFactory,transaction
 
@@ -21,12 +21,28 @@ class Restore(DumpRestoreBase):
 			self.info=pickle.load(fh)
 			_getLogger('Restore').info('Meta data read from %s',file_name)
 
+		self._getTablesWithLargeColumnTypes()
+
+
 	def run(self):
 		self.fixTextColumns()
 		self.createSchema()
 		self.changeRIChecks(off=True)
 		self.import_tables()
 		self.import_objects()
+
+	def _getTablesWithLargeColumnTypes(self):
+
+		def isLargeColumnType(col):
+			type=col.type
+			return isinstance(type,sa.TEXT) or (isinstance(type,sa.sql.sqltypes.NVARCHAR) and type.length=='max')
+
+		self._largeColumns={
+			tname: filter(isLargeColumnType,table.columns)
+			for (tname,table) in self.meta.tables.iteritems()
+		}
+		return self._largeColumns
+
 
 	def fixTextColumns(self):
 		logger=_getLogger('fixTextColumns')
@@ -76,9 +92,14 @@ class Restore(DumpRestoreBase):
 		logger=_getLogger('import_tables')
 		logger.info('Importing tables')
 		for (table_name,table) in self.meta.tables.iteritems():
+			if table_name!='congress_districts':
+				continue
+
+			large_columns=self._largeColumns[table_name]
 			file_name=os.path.join(self.backup_dir,'{}.pickle'.format(table_name))
 
 			logger.info('Restore data for table %s',table_name)
+			logger.debug('   table has large columns: %s',','.join([c.name for c in large_columns]))
 			logger.debug('   reading content from %s',file_name)
 			cnt=100
 			with open(file_name,'rb') as fh:
@@ -102,16 +123,106 @@ class Restore(DumpRestoreBase):
 						cnt=cnt+1
 
 					with transaction(self.con):
-						try:
-							self.con.execute(table.insert(),rows)
-						except:
-							logger.exception("Error inserting rows into %s:",table_name)
-							logger.error("Dumping rows:")
-							for r in rows:
-								logger.error("   {}".format(r))
-							raise
+						if len(large_columns)>0:
+							self._insertBlockWithLargeColumns(table,rows)
+						else:
+							self._insertBlock(table,rows)
+							
 
 					l=fh.readline()  
+
+	def _insertBlockWithLargeColumns(self,table,rows):
+		logger=_getLogger('_insertBlockWithLargeColumns')
+		large_columns=self._largeColumns[table.name]
+
+		def hasLargeField(row):
+			for c in large_columns:
+				if len(row[c.name])>65535:
+					return True
+			return False
+
+		def insertRow(row):
+			try:
+				self.con.execute(table.insert(),row)
+			except:
+				logger.exception("Error inserting rows into %s:",table.name)
+				raise
+
+		def updateLargeColumn(pk,pk_value,col,value):
+			logger.debug('Setting large value for column %s in row with pk %s',col.name,str(pk_value))
+			while len(value)>0:
+				chunk=value[0:65535]
+				value=value[65535:]
+				args={col.name: col+chunk}
+				try:
+					self.con.execute(table.update()\
+						.values(**args)\
+						.where(pk==pk_value))
+				except:
+					logger.exception('Error while setting large value for column %s in row with pk %s',col.name,str(pk_value))
+					raise
+
+		# get rows without and without large columns
+		ok_rows=[]
+		problem_rows=[]
+		for row in rows:
+			if hasLargeField(row):
+				problem_rows.append(row)
+			else:
+				ok_rows.append(row)
+		logger.debug('%d rows without large columns and %d rows with',len(ok_rows),len(problem_rows))
+
+		# first the ones without problems
+		self._insertBlock(table,ok_rows)
+		
+		# import pdb
+		# pdb.set_trace() 
+
+		# after finding the id key, we iterate over the rows 
+		# for each row we create a map with the columns over 65k
+		# before we set it to an emptt string in the row and 
+		# insert. Afterwards we update the large values with chunks of
+		# 65k each
+		pk=self._getPrimaryKeyColumn(table)
+		logger.debug('Primary key: %s',pk.name)
+		for row in problem_rows:
+			pk_value=row[pk.name]
+			logger.debug('Processing problem row pk=%s',str(pk_value))
+
+			large_value_map={}
+			new_row={}
+			for col in table.columns:
+				if col in large_columns and len(row[col.name])>65535:
+					large_value_map[col.name]=row[col.name]
+					new_row[col.name]=u''
+				else:
+					new_row[col.name]=row[col.name]
+
+			logger.debug('  -> inserting the row')
+			insertRow(new_row)
+
+			logger.debug('  -> setting the large columns')
+			for (c,v) in large_value_map.iteritems():
+				col=table.columns[c]
+				updateLargeColumn(pk,pk_value,col,v)
+
+
+
+	def _insertBlock(self,table,rows):
+		try:
+			self.con.execute(table.insert(),rows)
+		except:
+			logger.exception("Error inserting rows into %s:",table.name)
+			logger.error("Dumping rows:")
+			for r in rows:
+				logger.error("   {}".format(r))
+			raise		
+
+	def _getPrimaryKeyColumn(self,table):
+		pks=filter(lambda c: c.primary_key,table.columns)
+		if len(pks)>1:
+			raise "Table has more than one primary_key"
+		return pks[0]
 
 	def import_objects(self):
 		logger=_getLogger('import_objects')
