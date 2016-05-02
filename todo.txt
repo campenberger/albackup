@@ -1,6 +1,8 @@
-- Test with all databases
-	- run compare
-- Regression test an instance
+- data compare of sandbox-reporting
+	- check index difference in diff-sandbox.html, diff-td.html
+	- check table difference sysdiagrams in diff-tdstage.html
+
+- Regression test an instance (td-stage)
 - Document code
 - Add a readme
 - compression into an archive

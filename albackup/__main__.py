@@ -89,7 +89,7 @@ class Password(object):
 
 
 if __name__ == '__main__':
-	parser=argparse.ArgumentParser("Description backup or restore database with SQLAlchemy")
+	parser=argparse.ArgumentParser("python -m albackup")
 	parser.add_argument('mode',metavar='MODE',choices=('dump','restore','chg-password'), help="mode of operation (dump or restore,chg-password)")
 	parser.add_argument('--cfg','-c',dest='cfg_file',default='albackup.json', help="Configuration for dump or restore operation")
 	parser.add_argument('--meta-cache',default=None, help="Allow caching of database meta data")

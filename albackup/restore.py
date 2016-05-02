@@ -92,8 +92,6 @@ class Restore(DumpRestoreBase):
 		logger=_getLogger('import_tables')
 		logger.info('Importing tables')
 		for (table_name,table) in self.meta.tables.iteritems():
-			if table_name!='congress_districts':
-				continue
 
 			large_columns=self._largeColumns[table_name]
 			file_name=os.path.join(self.backup_dir,'{}.pickle'.format(table_name))
@@ -102,6 +100,9 @@ class Restore(DumpRestoreBase):
 			logger.debug('   table has large columns: %s',','.join([c.name for c in large_columns]))
 			logger.debug('   reading content from %s',file_name)
 			cnt=100
+			pks=self._getPrimaryKeyColumns(table)
+			if len(large_columns)>0 and len(pks)!=1:
+				logger.warn('Table %s with blobs has more or no primary key columns - falling back to block insert',table_name)
 			with open(file_name,'rb') as fh:
 				l=fh.readline()
 				while l and l!='EOF':
@@ -123,7 +124,7 @@ class Restore(DumpRestoreBase):
 						cnt=cnt+1
 
 					with transaction(self.con):
-						if len(large_columns)>0:
+						if len(large_columns)>0 and len(pks)==1:
 							self._insertBlockWithLargeColumns(table,rows)
 						else:
 							self._insertBlock(table,rows)
@@ -137,7 +138,7 @@ class Restore(DumpRestoreBase):
 
 		def hasLargeField(row):
 			for c in large_columns:
-				if len(row[c.name])>65535:
+				if row[c.name] and len(row[c.name])>65535:
 					return True
 			return False
 
@@ -175,15 +176,12 @@ class Restore(DumpRestoreBase):
 		# first the ones without problems
 		self._insertBlock(table,ok_rows)
 		
-		# import pdb
-		# pdb.set_trace() 
-
 		# after finding the id key, we iterate over the rows 
 		# for each row we create a map with the columns over 65k
 		# before we set it to an emptt string in the row and 
 		# insert. Afterwards we update the large values with chunks of
 		# 65k each
-		pk=self._getPrimaryKeyColumn(table)
+		pk=self._getPrimaryKeyColumns(table)[0]
 		logger.debug('Primary key: %s',pk.name)
 		for row in problem_rows:
 			pk_value=row[pk.name]
@@ -192,7 +190,7 @@ class Restore(DumpRestoreBase):
 			large_value_map={}
 			new_row={}
 			for col in table.columns:
-				if col in large_columns and len(row[col.name])>65535:
+				if col in large_columns and row[col.name] and len(row[col.name])>65535:
 					large_value_map[col.name]=row[col.name]
 					new_row[col.name]=u''
 				else:
@@ -218,11 +216,9 @@ class Restore(DumpRestoreBase):
 				logger.error("   {}".format(r))
 			raise		
 
-	def _getPrimaryKeyColumn(self,table):
-		pks=filter(lambda c: c.primary_key,table.columns)
-		if len(pks)>1:
-			raise "Table has more than one primary_key"
-		return pks[0]
+	def _getPrimaryKeyColumns(self,table):
+		return filter(lambda c: c.primary_key,table.columns)
+		
 
 	def import_objects(self):
 		logger=_getLogger('import_objects')
