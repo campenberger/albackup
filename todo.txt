@@ -1,6 +1,6 @@
 - data compare of sandbox-reporting
 	- check index difference in diff-sandbox.html, diff-td.html
-	- check table difference sysdiagrams in diff-tdstage.html
+	- check table difference sysdiagrams in diff-tdstage on.html
 
 - Regression test an instance (td-stage)
 - Document code

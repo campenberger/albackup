@@ -33,6 +33,7 @@ class Dump(DumpRestoreBase):
 
 	def run(self):
 		self.get_meta_data()
+		self.fix_indexes_with_included_columns()
 		self.backup_tables()
 		self.get_procedures()
 		self.get_functions()
@@ -91,6 +92,54 @@ class Dump(DumpRestoreBase):
 
 				logger.info("Written backup to %s",file_name)
 				res.close()
+
+	def fix_indexes_with_included_columns(self):
+		logger=_getLogger('fix_indexes_with_included_columns')
+		for (table_name,table) in self.meta.tables.iteritems():
+			if len(table.indexes)>0:
+				with transaction(self.con):
+					# get the object id of the table table
+					schema=table.schema if table.schema else 'dbo'
+					res=self.con.execute(
+						'''select tab.object_id 
+							from sys.schemas as sch
+								join sys.tables as tab on sch.schema_id=tab.schema_id
+							where sch.name='{}' and tab.name='{}'
+						'''.format(schema,table_name)
+					)
+					object_id=res.fetchone()[0]
+					res.close()
+					logger.debug('Object id for table %s: %s',table_name,str(object_id))
+					
+					# we use a shallow copy of the indexes, because we will alter
+					# the set while iterating over it. We check each index for 
+					# included columns and if there are any, recreate the index
+					# with the correct definition
+					for ix in table.indexes.copy():
+						logger.debug('Getting included columns for index %s',ix.name)
+						res=self.con.execute('''
+							select col.name
+							from sys.indexes as ix 
+			  					join sys.index_columns as ixcol on ix.object_id=ixcol.object_id and ix.index_id=ixcol.index_id
+			  					join sys.columns as col on ix.object_id=col.object_id and ixcol.column_id=col.column_id
+								where ix.object_id='{}' and ix.name='{}'  and ixcol.is_included_column='true';
+						'''.format(object_id,ix.name))
+						included_columns=res.fetchall()
+						res.close()
+						if len(included_columns)>0:
+							table.indexes.remove(ix)
+							included_columns=map(lambda x: x[0],included_columns)
+							index_columns=filter(lambda x: x.name not in included_columns, ix.columns)
+							new_ix=sa.Index(
+								ix.name, 
+								*index_columns,
+								mssql_include=included_columns
+							)
+							table.indexes.add(new_ix)
+						else:
+							logger.debug("Index %s on %s has no included columns",table_name,ix.name)
+			else:
+				logger.info('Table %s has no indexes',table_name)
 
 
 	def _get_object_definitions(self,sql):

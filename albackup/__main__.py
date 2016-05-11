@@ -141,11 +141,7 @@ if __name__ == '__main__':
 		enable_ri_check=cfg['enable_ri_check']
 			
 		restore=Restore(args.backup_dir,engine)
-		restore.fixTextColumns()
-		restore.createSchema()
-		restore.changeRIChecks(off=True)
-		restore.import_tables()
-		restore.import_objects()
+		restore.run()
 		if enable_ri_check:
 			restore.changeRIChecks(off=False)
 		else:
