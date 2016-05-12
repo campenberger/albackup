@@ -136,3 +136,4 @@ for cur_cfg in cfg['databases']:
 		comp=DbCompare(test_cfg,cfg['restore'],args.sqlwb)
 		comp.run()
 
+logger.info('Done with all databases.')

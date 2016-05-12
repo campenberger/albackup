@@ -2,6 +2,7 @@ import sqlalchemy as sa
 import logging
 import os
 import pytz
+import re
 import sqlalchemy.sql.expression as ex
 from datetime import datetime
 from sqlalchemy.sql import func
@@ -33,6 +34,7 @@ class Dump(DumpRestoreBase):
 
 	def run(self):
 		self.get_meta_data()
+		self.fix_primary_key_order()
 		self.fix_indexes_with_included_columns()
 		self.backup_tables()
 		self.get_procedures()
@@ -141,6 +143,28 @@ class Dump(DumpRestoreBase):
 			else:
 				logger.info('Table %s has no indexes',table_name)
 
+	def fix_primary_key_order(self):
+		''' Fix the column sequencing of all pimary keys '''
+
+		logger=_getLogger('fix_primary_key_order')
+		for (table_name,table) in self.meta.tables.iteritems():
+			if table.primary_key:
+				logger.info("Checking primary for %s",table_name)
+
+				with transaction(self.con):
+					res=self.con.execute("exec sp_pkeys '{}'".format(table_name))
+					pkeys=res.fetchall()
+					res.close()
+					pkeys.sort(key=lambda x: x[4])
+
+					table.primary_key=sa.schema.PrimaryKeyConstraint(*[
+						table.columns[r[3]]
+						for r in pkeys
+					],
+					name=table.primary_key.name)
+			else:
+				logger.warn('No primary key for %s',table_name)
+
 
 	def _get_object_definitions(self,sql):
 		logger=_getLogger('_get_object_definitions')
@@ -245,7 +269,15 @@ class Dump(DumpRestoreBase):
 	def get_triggers(self):
 		logger=_getLogger('get_triggers')
 		logger.info('Retrieving all triggers')
-		self.info['triggers']=self._get_object_definitions("select o.name from sysobjects o where type='TR';" )	
+		self.info['triggers']=self._get_object_definitions("select o.name from sysobjects o where type='TR';" )
+
+		regex=re.compile(r'on "(.+?)"\."(.+?)"\."(.+?)" ',re.I | re.U)
+
+		def fix_view_name(objdef):
+			text=regex.sub(r'on "\2"."\3" ',objdef.defintion)
+			return ObjectDef(objdef.name, text, objdef.dependencies)
+
+		self.info['triggers']=map(fix_view_name,self.info['triggers'])
 		return self.info['triggers']
 
 	def finsih_backup(self):
