@@ -155,7 +155,8 @@ class Dump(DumpRestoreBase):
 						included_columns=res.fetchall()
 						res.close()
 						if len(included_columns)>0:
-							new_ix_def['args']['mssql_include']=map(lambda x: x[0],included_columns)
+							included_columns=map(lambda x: x[0],included_columns)
+							new_ix_def['args']['mssql_include']=included_columns
 							new_ix_def['index_columns']=filter(lambda x: x.name not in included_columns, ix.columns)
 							new_ix_def['required']=True							
 						else:
