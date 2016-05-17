@@ -114,32 +114,62 @@ class Dump(DumpRestoreBase):
 					logger.debug('Object id for table %s: %s',table_name,str(object_id))
 					
 					# we use a shallow copy of the indexes, because we will alter
-					# the set while iterating over it. We check each index for 
-					# included columns and if there are any, recreate the index
-					# with the correct definition
+					# the set while iterating over it. We have to do several things:
+					# 
+					# - check for clustered indexses and change the type def accordingly
+					# - check for included columns and if there are any, recreate the index
+					#   with the correct definition
 					for ix in table.indexes.copy():
+						new_ix_def={
+							'required': False,
+							'index_columns': ix.columns,
+							'args': {}
+						}
+
+						logger.debug('Check defintion of index %s for clustered',ix.name)
+						res=self.con.execute('''
+							select ix.type_desc,ix.is_unique,ix.is_primary_key,ix.is_unique_constraint
+							from sys.indexes as ix 
+							where ix.object_id='{}' and ix.name='{}'
+						'''.format(object_id,ix.name))
+						type_def=res.fetchone()
+						res.close()
+						if type_def[0]=='CLUSTERED':
+							logger.debug('Index %s is clustered',ix.name)
+							new_ix_def['args']['mssql_clustered']=True
+							new_ix_def['required']=True
+
+						if type_def[1] and not (type_def[2] or type_def[3]):
+							logger.debug('Index %s in unique, but not PK or unique constraint')
+							new_ix_def['args']['unique']=True
+
+						# check for included columns
 						logger.debug('Getting included columns for index %s',ix.name)
 						res=self.con.execute('''
 							select col.name
 							from sys.indexes as ix 
 			  					join sys.index_columns as ixcol on ix.object_id=ixcol.object_id and ix.index_id=ixcol.index_id
 			  					join sys.columns as col on ix.object_id=col.object_id and ixcol.column_id=col.column_id
-								where ix.object_id='{}' and ix.name='{}'  and ixcol.is_included_column='true';
+							where ix.object_id='{}' and ix.name='{}'  and ixcol.is_included_column='true'
 						'''.format(object_id,ix.name))
 						included_columns=res.fetchall()
 						res.close()
 						if len(included_columns)>0:
-							table.indexes.remove(ix)
-							included_columns=map(lambda x: x[0],included_columns)
-							index_columns=filter(lambda x: x.name not in included_columns, ix.columns)
-							new_ix=sa.Index(
-								ix.name, 
-								*index_columns,
-								mssql_include=included_columns
-							)
-							table.indexes.add(new_ix)
+							new_ix_def['args']['mssql_include']=map(lambda x: x[0],included_columns)
+							new_ix_def['index_columns']=filter(lambda x: x.name not in included_columns, ix.columns)
+							new_ix_def['required']=True							
 						else:
 							logger.debug("Index %s on %s has no included columns",table_name,ix.name)
+
+						# redefine the index, if needed
+						if new_ix_def['required']:
+							table.indexes.remove(ix)
+							new_ix=sa.Index(
+								ix.name, 
+								*new_ix_def['index_columns'],
+								**new_ix_def['args']
+							)
+							table.indexes.add(new_ix)
 			else:
 				logger.info('Table %s has no indexes',table_name)
 

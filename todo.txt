@@ -1,7 +1,6 @@
-- data compare of sandbox-reporting
-	- check index difference in diff-sandbox.html, diff-td.html
-	- check table difference sysdiagrams in diff-tdstage on.html
-
+- Add data compare
+- Add crystal and logi databases
+	- astar-prod-crystal: problem with clustered indexes
 - Regression test an instance (td-stage)
 - Document code
 - Add a readme
