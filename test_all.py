@@ -3,6 +3,7 @@ import logging
 import argparse
 import sqlalchemy as sa
 import pyodbc
+import copy
 
 from sqlalchemy.pool import NullPool
 from albackup import loggerFactory
@@ -53,25 +54,29 @@ class DatabaseRecreator(object):
 		logger.info('   port    : %d',cfg['db_port'])
 		logger.info('   db      : %s','master')
 			
-	def recreate(self):
+	def recreate(self,db_name=None):
+		if db_name is None:
+			db_name=self.db
+
 		c=self.con.cursor()
 
-		c.execute("SELECT name FROM master.sys.databases WHERE name = N'{}'".format(self.db))
+		c.execute("SELECT name FROM master.sys.databases WHERE name = N'{}'".format(db_name))
 		if len(c.fetchall())>0:
-			self.con.execute('drop database {}'.format(self.db))	
+			self.con.execute('drop database {}'.format(db_name))	
 		c.close()
 
 		self.con.execute(
 			"create database {} on primary  (name={},filename='d:\\rdsdbdata\\data\\{}', size=100MB )"\
-			.format(self.db,self.db,self.db)
+			.format(db_name,db_name,db_name)
 		)
-		_getLogger('DatabaseRecreate').info('Database %s re-created',self.db)
+		_getLogger('DatabaseRecreate').info('Database %s re-created',db_name)
 
 
 
 parser=argparse.ArgumentParser("Test prog to backup restore all databases and comparing them")
 parser.add_argument('--debug','-d',action="store_true",default=False,help="Run in debug mode")
 parser.add_argument('--sqlwb',action='store',default='../sqlworkbench',help='Location of the sqlworkbench tools')
+parser.add_argument('--test-cfg',action='store',default='test_all.json',help="The json config file to be used")
 args=parser.parse_args()
 
 logging.basicConfig(
@@ -86,9 +91,9 @@ logger=_getLogger()
 
 # load test.json
 cfg=None
-with open('test.json') as fh:
+with open(args.test_cfg) as fh:
 	cfg=json.load(fh)
-	logger.info('Read configuration from test.json')
+	logger.info('Read configuration from %s',args.test_cfg)
 
 recreator=DatabaseRecreator(cfg['restore'])
 
@@ -100,6 +105,8 @@ for cur_cfg in cfg['databases']:
 		'enable_ri_check': True
 	}
 	test_cfg.update(cur_cfg)
+
+	restore_cfg=copy.copy(cfg['restore'])
 
 	if test_cfg['skip']:
 		logger.warn('Test for %s skipped',test_cfg['name'])
@@ -114,12 +121,13 @@ for cur_cfg in cfg['databases']:
 		engine.dispose()
 
 		# re-create database
-		recreator.recreate()
+		restore_name=test_cfg['restore_name'] if 'restore_name' in test_cfg else restore_cfg['db_name']
+		restore_cfg['db_name']=restore_name
+		recreator.recreate(restore_name)
 
 		# now the restore
 		backup_dir=dump.backup_dir
-		engine=create_engine(cfg['restore'],poolclass=NullPool)
-		assert cfg['restore']['allow_restore']
+		engine=create_engine(restore_cfg,poolclass=NullPool)
 		enable_ri_check=test_cfg['enable_ri_check']
 				
 		restore=Restore(backup_dir,engine)
@@ -133,7 +141,7 @@ for cur_cfg in cfg['databases']:
 		engine.dispose()
 
 		# compare the two
-		comp=DbCompare(test_cfg,cfg['restore'],args.sqlwb)
+		comp=DbCompare(test_cfg,restore_cfg,args.sqlwb)
 		comp.run()
 
 logger.info('Done with all databases.')
