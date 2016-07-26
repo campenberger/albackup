@@ -14,6 +14,9 @@ from albackup.compare import DbCompare
 _getLogger=loggerFactory('test_all')
 
 def create_engine(cfg,**kwargs):
+	''' Utility method to create a SQLAlchemy engine for a given configuration. 
+		Additional kwargs can be passed into the create_engine call.
+	'''
 	logger=_getLogger('create_engine')
 
 	logger.info('Database configuration:')
@@ -33,8 +36,15 @@ def create_engine(cfg,**kwargs):
 
 
 class DatabaseRecreator(object):
+	''' Class to delete and recreate a database. The methods use a direct pyodbc
+		connection to the master database instead of an SQLAlchemy connection
+	'''
 
 	def __init__(self,cfg):
+		''' Constructor
+
+			Establisches the odbc conneciton to the master database
+		'''
 		logger=_getLogger('DatabaseRecreate')
 		self.db=cfg['db_name']
 		self.con=pyodbc.connect(
@@ -55,6 +65,9 @@ class DatabaseRecreator(object):
 		logger.info('   db      : %s','master')
 			
 	def recreate(self,db_name=None):
+		''' Checks if a given database, or the database from the configuration already
+			exists and deletes its. Afterwards the database will be recreated.
+		'''
 		if db_name is None:
 			db_name=self.db
 

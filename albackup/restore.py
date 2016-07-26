@@ -8,12 +8,18 @@ from sqlalchemy.dialects.mssql import NTEXT,NVARCHAR
 from . import ObjectDef,DumpRestoreBase,loggerFactory,transaction
 
 
-
 _getLogger=loggerFactory('restore')
 
 class Restore(DumpRestoreBase):
+	''' Main class to handle a restore operation
+	'''
 
 	def __init__(self,backup_dir,engine):
+		''' Constructor
+
+			* backup_dir - location of backup to be restored
+			* engine - the SQLAlchemy ening in use
+		'''
 		super(Restore,self).__init__(backup_dir,engine)
 
 		file_name=os.path.join(self.backup_dir,'_metadata.pickle')
@@ -25,13 +31,19 @@ class Restore(DumpRestoreBase):
 
 
 	def run(self):
+		''' Main method that runs the complete restore operation
+		'''
 		self.fixTextColumns()
 		self.createSchema()
 		self.changeRIChecks(off=True)
 		self.import_tables()
 		self.import_objects()
 
+
 	def _getTablesWithLargeColumnTypes(self):
+		''' Helper method that creates a lookup dict with a list of all
+			large columns (type is text or nvarchar(max)) per table
+		'''
 
 		def isLargeColumnType(col):
 			type=col.type
@@ -45,6 +57,9 @@ class Restore(DumpRestoreBase):
 
 
 	def fixTextColumns(self):
+		''' The reflection of text columns is such that it causes problems during the
+			restore. This method fixes the issue by redefining them.
+		'''
 		logger=_getLogger('fixTextColumns')
 		self.suspect_columns={}
 		for tab in self.meta.tables:
@@ -60,7 +75,11 @@ class Restore(DumpRestoreBase):
 					self.suspect_columns["%s.%s" % (tab, col.name)]=True
 					logger.debug('Correctd column %s.%s',tab,col.name)
 
+
 	def createSchema(self):
+		''' The method deletes all views and tables before re-creating the schema from
+			the meta data in the backup
+		'''
 		logger=_getLogger('createSchema')
 		with transaction(self.con):
 			self._drop_views()
@@ -71,7 +90,10 @@ class Restore(DumpRestoreBase):
 			logger.info('Re-creating tables ....')
 			self.meta.create_all(self.con)
 
+
 	def changeRIChecks(self,off):
+		''' Method to turn Referential Integrity checks on or off
+		'''
 		logger=_getLogger('turnOffRIChecks')
 		with transaction(self.con):
 			if off:
@@ -83,12 +105,23 @@ class Restore(DumpRestoreBase):
 
 
 	def _drop_views(self):
+		''' Helper method to delete all views
+		'''
 		_getLogger('_drop_views').info('Dropping views')
 		for v in reversed(self.views):
 			self.con.execute("IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.VIEWS WHERE table_name= '%s') DROP VIEW %s" % (v.name,v.name))
 
 
 	def import_tables(self):
+		''' One of the main methods that restores all the tables. It iterates over all tables
+			and restores their content from the backup files. The backup files are hydrated by
+			block and then each block is inserted.
+
+			For most tables a bulk insert will be performed. Tables that contain blobs will be
+			restored row by row without the blobs and then the blobs will be added in chunks of 65k.
+
+			Every 50 blocks the current database connection with be recycled as well.
+		'''
 		logger=_getLogger('import_tables')
 		logger.info('Importing tables')
 		for (table_name,table) in self.meta.tables.iteritems():
@@ -133,6 +166,11 @@ class Restore(DumpRestoreBase):
 					l=fh.readline()  
 
 	def _insertBlockWithLargeColumns(self,table,rows):
+		''' Helper method that restores tables with large columns. The method first
+			bulk inserts all rows in the block that don't contain any blob fields
+			that exceed 65k. Then the problem rows will be inserted row by row without
+			the blob fields, before the blob fields are loaded in blocks of 65k each.
+		'''
 		logger=_getLogger('_insertBlockWithLargeColumns')
 		large_columns=self._largeColumns[table.name]
 
@@ -207,6 +245,8 @@ class Restore(DumpRestoreBase):
 
 
 	def _insertBlock(self,table,rows):
+		''' Helper method to bulk insert a block of rows
+		'''
 		try:
 			self.con.execute(table.insert(),rows)
 		except:
@@ -217,10 +257,14 @@ class Restore(DumpRestoreBase):
 			raise		
 
 	def _getPrimaryKeyColumns(self,table):
+		''' Helper method to return the primary key colmns from a given table definition
+		'''
 		return filter(lambda c: c.primary_key,table.columns)
 		
 
 	def import_objects(self):
+		''' Restores procedures, functions and triggers that were preserved with the backup
+		'''
 		logger=_getLogger('import_objects')
 		objects=(
 			(self.procedures, 	"if exists (select * from information_schema.routines where routine_schema='dbo' "+\
@@ -249,6 +293,11 @@ class Restore(DumpRestoreBase):
 
 
 	def _import_object(self,check_and_delete,objs):
+		''' Helper method to restore a collection database objects of onw particular type.
+
+			* check_and_delete - sql query to delete a particular object, if it already exists
+			* objs - list of objects to be restored
+		'''	
 		logger=_getLogger('_import_object')
 		crappy_backslash=re.compile(r'(\[.*?)\x92(.*?])')
 		for v in objs:

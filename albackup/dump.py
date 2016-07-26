@@ -16,8 +16,21 @@ BLOCK_SIZE=500
 _getLogger=loggerFactory('Dump')
 
 class Dump(DumpRestoreBase):
+	''' Class to handle database dumps '''
 
 	def __init__(self,backup_dir,meta_data_dir,engine,db_name,db_server):
+		''' Constructor
+
+			* backup_dir - parent directory in which the database directory will be created
+			* meta_data_dir - directory to cache SQLAlchemy database meta data
+			* engine - The engine instance in use
+			* db_name - the name of the database that is backed up
+			* db_server - the name of the server on which the daase resides
+			
+			The method creates a target directory for the backup: 
+
+				<backup_dir>/<db_name>@<db_server>-<utc timestamp>
+		'''
 		super(Dump,self).__init__(backup_dir,engine)
 		self.meta_data_dir=meta_data_dir
 		self.db_name=db_name
@@ -33,6 +46,8 @@ class Dump(DumpRestoreBase):
 
 
 	def run(self):
+		''' Main worker method that performs the complete backup process
+		'''
 		self.get_meta_data()
 		self.fix_primary_key_order()
 		self.fix_indexes_with_included_columns()
@@ -43,7 +58,12 @@ class Dump(DumpRestoreBase):
 		self.get_views()
 		self.finsih_backup()
 
+
 	def get_meta_data(self):
+		''' Attempts to restore the database meta data from the cache directory, or
+			reflects the meta data and preserves it in the cache directory, if one
+			has been given
+		'''
 		logger=_getLogger('get_meta_data')
 		meta=None
 		pickle_name=None
@@ -65,7 +85,17 @@ class Dump(DumpRestoreBase):
 		self.info['meta']=meta
 		return meta
 
+
  	def backup_tables(self,):
+ 		''' Iterates over all backup tables and writes them into individual pickle files.
+ 			Each table file is made of blocks with pickeled row data preced by a line that
+ 			contains the size of the block in bytes:
+
+ 				117536\n
+ 				....17536 bytes of pickled row data...
+ 				1200\n
+ 				...1200 bytes of pickled row data...
+ 		'''
 		logger=_getLogger('backup_tables')
 		meta=self.info['meta']
 
@@ -95,7 +125,12 @@ class Dump(DumpRestoreBase):
 				logger.info("Written backup to %s",file_name)
 				res.close()
 
+
 	def fix_indexes_with_included_columns(self):
+		''' SQLAlchemy's reflection engine mishandles indexes with included columns. 
+			Therefore this method iterates over all indexes and corrects the defintion
+			of indexes with included columns.
+		'''
 		logger=_getLogger('fix_indexes_with_included_columns')
 		for (table_name,table) in self.meta.tables.iteritems():
 			if len(table.indexes)>0:
@@ -174,9 +209,12 @@ class Dump(DumpRestoreBase):
 			else:
 				logger.info('Table %s has no indexes',table_name)
 
-	def fix_primary_key_order(self):
-		''' Fix the column sequencing of all pimary keys '''
 
+	def fix_primary_key_order(self):
+		''' SQLAlchemy's reflection engine sometimes gets the order of 
+			columns in primary key constraints wrong. This method corrects
+			the problem in the meta data
+		'''
 		logger=_getLogger('fix_primary_key_order')
 		for (table_name,table) in self.meta.tables.iteritems():
 			if table.primary_key:
@@ -198,6 +236,11 @@ class Dump(DumpRestoreBase):
 
 
 	def _get_object_definitions(self,sql):
+		''' Helper method to fetch objects defintions from the data dictionary
+
+			* sql - SQL statement to select the name of all objects,
+			        whoes definition should be retrieved
+		'''
 		logger=_getLogger('_get_object_definitions')
 		logger.debug('Getting all object names from %s',sql)
 
@@ -213,14 +256,23 @@ class Dump(DumpRestoreBase):
 					ret.append( ObjectDef(v,vdef,None) )
 		return ret
 
+
 	def _get_object_dependencies(self,name):
+		''' Retrieves the object dependencies of a given database object from
+			the data dictionary and returns them.
+		'''
 		with transaction(self.con):
 			sql="SELECT DISTINCT referenced_schema_name, referenced_entity_name FROM sys.dm_sql_referenced_entities('dbo.%s', 'OBJECT');" % name
 
 			with execute_resultset(self.con, sql) as res:
 				return res.fetchall()
 
+
 	def get_views(self):
+		''' Retrieves all view objects from the data dictionary and preserves
+			them in the current backup info. The views are ordered by their
+			dependencies, so they can be recreated without missing dependencies
+		'''
 		logger=_getLogger('get_views')
 		logger.info('Retrieving all views')
 
@@ -280,7 +332,11 @@ class Dump(DumpRestoreBase):
 		self.info['views']=ordered_views
 		return ordered_views
 
+
 	def get_procedures(self):
+		''' Fetches all procedure databaase objects from the data dictionary and
+			preserves them in the current backup info.
+		'''
 		logger=_getLogger('get_procedures')
 		logger.info('Retrieving all procuedures')
 		self.info['procedures']=self._get_object_definitions(
@@ -290,6 +346,9 @@ class Dump(DumpRestoreBase):
 
 
 	def get_functions(self):
+		''' Fetches all function databaase objects from the data dictionary and
+			preserves them in the current backup info.
+		'''
 		logger=_getLogger('get_functions')
 		logger.info('Retrieving all functions')
 		self.info['functions']=self._get_object_definitions(
@@ -297,7 +356,11 @@ class Dump(DumpRestoreBase):
 		)
 		return self.info['functions']
 
+
 	def get_triggers(self):
+		''' Fetches all trigger databaase objects from the data dictionary and
+			preserves them in the current backup info.
+		'''
 		logger=_getLogger('get_triggers')
 		logger.info('Retrieving all triggers')
 		self.info['triggers']=self._get_object_definitions("select o.name from sysobjects o where type='TR';" )
@@ -311,7 +374,12 @@ class Dump(DumpRestoreBase):
 		self.info['triggers']=map(fix_view_name,self.info['triggers'])
 		return self.info['triggers']
 
+
 	def finsih_backup(self):
+		''' The method finished the backup operations by recording the end time in the
+			current info objec and then persists the info object as _metadata.pickle
+			in the backup target directory
+		'''
 		logger=_getLogger('finsih_backup')
 		self.info['finished']=datetime.now(pytz.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')
 		file_name=os.path.join(self.backup_dir,'_metadata.pickle')

@@ -1,11 +1,12 @@
-- Add data compare
-- Add crystal and logi databases
-	- astar-prod-crystal: problem with clustered indexes
-- Regression test an instance (td-stage)
 - Document code
 - Add a readme
-- compression into an archive
-- built and unit test
+	- describe symmetric ds scenarios
+		- moving a db: pause node, move db, create the sym databases, change the node config and turn it back on
+		- restoring an older backup: pause node, restore db, wipe replicated db, re-setup replication
+- test crystal and logi with Sandbox
+- build and unit test
+- compression into an archives
+
 
 
 Diffing the schema with SQLWorkbench/J
@@ -33,3 +34,4 @@ Installing unixODBC & freeTDS
 
 	sudo apt-get install libffi-dev
 	sudo pip install -U pyopenssl ndg-httpsclient pyasn1
+

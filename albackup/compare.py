@@ -13,16 +13,28 @@ _getLogger=loggerFactory('compare')
 jina_env=Environment(loader=FileSystemLoader('templates'))
 
 class DbCompare(object):
+	''' Test class to execute the WBSchemaDiff from the sqlworkbench
+		utilities to compare two schemas and report the differences.
+	'''
 
 	TEMPLATE="compare.sql"
 
 	def __init__(self,ref_cfg,target_cfg,sqlwb_dir):
+		''' Constructor:
+
+			* ref_cfg - Configuration dictonary for the reference schema
+			* target_cfg - Configuration dictionary for the target schema
+			* sqlwb_dir - Install location of SQLWorkbench
+		'''
 		self.ref_cfg=ref_cfg
 		self.target_cfg=target_cfg
 		self.sqlwb_dir=os.path.abspath(sqlwb_dir)
 		self.logger=_getLogger('DbCompare')
 
 	def _make_template(self):
+		''' Method the generate an SQL instruction file
+			for the compare from the template
+		'''
 		template=jina_env.get_template(self.TEMPLATE)
 		self._sql_cmdfile=NamedTemporaryFile(mode="w+")
 		
@@ -45,6 +57,9 @@ class DbCompare(object):
 		return self._sql_cmdfile
 
 	def _compare(self):
+		''' Method to launch the the SQLWorkbench console application with
+			the generated sql file
+		'''
 		self.logger.info('Comparing database schemas... (takes a while)')
 
 		sqlwbconsole=sh.Command(os.path.join(self.sqlwb_dir,'sqlwbconsole.sh'))
@@ -54,6 +69,9 @@ class DbCompare(object):
 		self.logger.info('Results are in diff-%s.xml and diff-%s.html',self.ref_cfg['name'],self.ref_cfg['name'])
 
 	def run(self):
+		''' Runds the SQLWorkbench WBSchemaDiff based on the given configurations
+			and writes the result in diff-<name>.xml and diff-<name>.html files
+		'''
 		self._make_template()
 		self._compare()
 
