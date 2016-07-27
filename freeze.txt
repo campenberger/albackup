@@ -4,3 +4,5 @@ pyodbc==3.0.10
 pycrypto==2.6.1
 Jinja2==2.8
 sh==1.11
+pynt==0.8.1
+pdoc==0.3.2

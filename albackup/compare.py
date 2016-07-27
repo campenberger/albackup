@@ -10,7 +10,7 @@ from albackup import loggerFactory
 
 
 _getLogger=loggerFactory('compare')
-jina_env=Environment(loader=FileSystemLoader('templates'))
+_jina_env=Environment(loader=FileSystemLoader('templates'))
 
 class DbCompare(object):
 	''' Test class to execute the WBSchemaDiff from the sqlworkbench
@@ -35,7 +35,7 @@ class DbCompare(object):
 		''' Method the generate an SQL instruction file
 			for the compare from the template
 		'''
-		template=jina_env.get_template(self.TEMPLATE)
+		template=_jina_env.get_template(self.TEMPLATE)
 		self._sql_cmdfile=NamedTemporaryFile(mode="w+")
 		
 		cwd_dir=os.path.abspath(os.path.join(os.getcwd(),'diffs'))

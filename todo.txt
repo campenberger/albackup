@@ -1,4 +1,4 @@
-- Document code
+- add pydoc build
 - Add a readme
 	- describe symmetric ds scenarios
 		- moving a db: pause node, move db, create the sym databases, change the node config and turn it back on
