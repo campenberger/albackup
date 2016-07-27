@@ -124,6 +124,24 @@ Restore is similar:
 The main difference is that a specific backup directory must be given that will be restored. Furthermore the configuration file must
 explicitly allow restoring to the database with `"allow_restore": false`, because tables will be deleted and re-created.
 
+#### Restoring replicated databases
+
+Some of our databases are replicated with SymmetricDS. This needs to be taken into consideration when restoring a database.
+
+For moving a database:
+* Pause the node replication
+* Restore the database in the new location
+* Create the SymmetricDS state database
+* Change the node configurion
+* Turn the node replication back on
+
+To restore an older version of the database:
+* Pause the node replication
+* Restore the database in the new location
+* Delete the node configuration
+* Wipe or re-created the target database
+* Re-setup the replication and perform an inital data load
+
 ### test_all.py
 
 `test_all.py` is a utility that takes a configuration file test.json and iterates over a number of databases that it backs up, restore to a temp database and performs a schema compare between the two. It uses SQLWorkbench to do the compare, so the location of the tool must

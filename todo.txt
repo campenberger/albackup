@@ -1,8 +1,3 @@
-- add pydoc build
-- Add a readme
-	- describe symmetric ds scenarios
-		- moving a db: pause node, move db, create the sym databases, change the node config and turn it back on
-		- restoring an older backup: pause node, restore db, wipe replicated db, re-setup replication
 - test crystal and logi with Sandbox
 - build and unit test
 - compression into an archives
