@@ -133,6 +133,7 @@ class DumpRestoreBase(object):
 
 import sys
 import base64
+import json
 from Crypto.Cipher import Blowfish
 from Crypto import Random
 import struct
@@ -159,18 +160,24 @@ class Password(object):
             and then propmps for a new password and then confirms it, before
             writing it back into the json configuration file.
         '''
+        print "Changing password for %s@%s" % (self.cfg['db_user'],self.cfg['db_server'])
+        if 'db_password' in self.cfg and self.cfg['db_password']:
+            cnt=0
+            while cnt<3:
+                cnt=cnt+1
+                print "Existing Password: ",
+                line=sys.stdin.readline()[:-1]
+                if not self._check(line):
+                    print "Invalid password"
+                    continue
+                else:
+                    break
+            else:
+                return False
+
         cnt=0
         while cnt<3:
             cnt=cnt+1
-            print "Changing password for %s@%s" % (cfg['db_name'],cfg['db_server'])
-
-            if 'db_password' in cfg and cfg['db_password']:
-                print "Old Password: ",
-                l=sys.stdin.readline()[:-1]
-                if not self._check(l):
-                    print "Invalid password"
-                    continue
-
 
             print "New Password: ",
             p1=sys.stdin.readline()[:-1]
@@ -187,9 +194,10 @@ class Password(object):
                 json.dump(self.cfg,fh,indent=3)
                 print "Configuration file %s updated with new password" % self.cfg_file
 
-            return
+            return True
                     
         print "Changing password failed!"
+        return False
 
 
     @property
@@ -227,4 +235,3 @@ class Password(object):
         ret=cipher.decrypt(pw)
         return ret[0:blen]
 
-# __all__=["compare","dump","restore"]

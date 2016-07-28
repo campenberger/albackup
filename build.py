@@ -14,6 +14,7 @@ import fnmatch
 from collections import namedtuple
 from pynt import task
 
+sys.path.insert(0,".")
 
 def execute(prefix,cmd):
     stmt=" ".join(cmd)
@@ -25,7 +26,7 @@ def execute(prefix,cmd):
 def utest():
     ''' Runs all unit tests with a progress indicator '''
 
-    from test.AllTests import run
+    from test import run
 
     # setup test options
     class Opts(object):

@@ -1,0 +1,6 @@
+[run]
+source=albackup
+omit=
+	test/*
+	*/__main__.py
+branch=true

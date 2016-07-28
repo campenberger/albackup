@@ -68,15 +68,16 @@ class DbCompare(object):
 		self.logger.debug('database compare scripted returned:\n%s',output)
 		self.logger.info('Results are in diff-%s.xml and diff-%s.html',self.ref_cfg['name'],self.ref_cfg['name'])
 
-	def run(self):
+	def run(self): # pragma: nocover
 		''' Runds the SQLWorkbench WBSchemaDiff based on the given configurations
 			and writes the result in diff-<name>.xml and diff-<name>.html files
 		'''
 		self._make_template()
 		self._compare()
+		self._sql_cmdfile.close()
 
 
-if __name__ == '__main__':
+if __name__ == '__main__': # pragma: nocover
 
 	logging.basicConfig(
 		level=logging.DEBUG,
