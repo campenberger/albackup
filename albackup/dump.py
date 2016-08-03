@@ -45,7 +45,7 @@ class Dump(DumpRestoreBase):
 			_getLogger('Dump').info('Backup dir %s created',backup_dir)
 
 
-	def run(self):
+	def run(self): # pragma: nocover
 		''' Main worker method that performs the complete backup process
 		'''
 		self.get_meta_data()
@@ -206,7 +206,8 @@ class Dump(DumpRestoreBase):
 								**new_ix_def['args']
 							)
 							table.indexes.add(new_ix)
-			else:
+
+			else: # pragma: nocover
 				logger.info('Table %s has no indexes',table_name)
 
 
@@ -231,7 +232,8 @@ class Dump(DumpRestoreBase):
 						for r in pkeys
 					],
 					name=table.primary_key.name)
-			else:
+
+			else: # pragma: nocover
 				logger.warn('No primary key for %s',table_name)
 
 
@@ -292,6 +294,11 @@ class Dump(DumpRestoreBase):
 			new_views.append( ObjectDef(view.name,view.defintion,map(lambda x: x[1].lower(),deps)) )
 			logger.debug("   Got: %s",",".join(new_views[i].dependencies))
 
+		return self._order_view_by_dependencies(new_views)
+
+
+	def _order_view_by_dependencies(self,new_views):
+		logger=_getLogger('_order_view_by_dependencies')
 
 		# create list of already predefined objects
 		already_defined={ name.lower(): table for (name,table) in self.meta.tables.iteritems() }
