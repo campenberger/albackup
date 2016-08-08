@@ -27,12 +27,11 @@ class Restore(DumpRestoreBase):
 			self.info=pickle.load(fh)
 			_getLogger('Restore').info('Meta data read from %s',file_name)
 
-		self._getTablesWithLargeColumnTypes()
 
-
-	def run(self):
+	def run(self): #pragma: nocover
 		''' Main method that runs the complete restore operation
 		'''
+		self.getTablesWithLargeColumnTypes()
 		self.fixTextColumns()
 		self.createSchema()
 		self.changeRIChecks(off=True)
@@ -40,7 +39,7 @@ class Restore(DumpRestoreBase):
 		self.import_objects()
 
 
-	def _getTablesWithLargeColumnTypes(self):
+	def getTablesWithLargeColumnTypes(self):
 		''' Helper method that creates a lookup dict with a list of all
 			large columns (type is text or nvarchar(max)) per table
 		'''
@@ -148,10 +147,7 @@ class Restore(DumpRestoreBase):
 					# of requests gets bad. So, we recyle the connection after a while
 					if cnt>=50:
 						logger.debug('Recyling connection')
-						con=self.con
-						self.con=self.engine.connect()
-						con.invalidate()
-						con.close()
+						self._recycleConnection()
 						cnt=0
 					else:
 						cnt=cnt+1
@@ -161,7 +157,6 @@ class Restore(DumpRestoreBase):
 							self._insertBlockWithLargeColumns(table,rows)
 						else:
 							self._insertBlock(table,rows)
-							
 
 					l=fh.readline()  
 
@@ -183,7 +178,7 @@ class Restore(DumpRestoreBase):
 		def insertRow(row):
 			try:
 				self.con.execute(table.insert(),row)
-			except:
+			except: # pragma: nocover
 				logger.exception("Error inserting rows into %s:",table.name)
 				raise
 
@@ -197,7 +192,7 @@ class Restore(DumpRestoreBase):
 					self.con.execute(table.update()\
 						.values(**args)\
 						.where(pk==pk_value))
-				except:
+				except: # pragma: nocover
 					logger.exception('Error while setting large value for column %s in row with pk %s',col.name,str(pk_value))
 					raise
 
@@ -242,6 +237,12 @@ class Restore(DumpRestoreBase):
 				col=table.columns[c]
 				updateLargeColumn(pk,pk_value,col,v)
 
+	def _recycleConnection(self):
+		# helper method to close the current connection and getting a new one
+		con=self.con
+		self.con=self.engine.connect()
+		con.invalidate()
+		con.close()
 
 
 	def _insertBlock(self,table,rows):
@@ -249,7 +250,7 @@ class Restore(DumpRestoreBase):
 		'''
 		try:
 			self.con.execute(table.insert(),rows)
-		except:
+		except: # pragma: nocover
 			logger.exception("Error inserting rows into %s:",table.name)
 			logger.error("Dumping rows:")
 			for r in rows:
@@ -267,22 +268,25 @@ class Restore(DumpRestoreBase):
 		'''
 		logger=_getLogger('import_objects')
 		objects=(
-			(self.procedures, 	"if exists (select * from information_schema.routines where routine_schema='dbo' "+\
-				"and routine_type='PROCEDURE' and routine_name='%s') "+\
-				"drop procedure %s",
+			(	self.procedures, 	
+				"if exists (select * from information_schema.routines where routine_schema='dbo' "+\
+					"and routine_type='PROCEDURE' and routine_name='%s') "+\
+					"drop procedure %s",
 				"Procedures"
 			),
 			
-			(self.functions,	"if exists (select * from information_schema.routines where routine_schema='dbo' "+\
-				"and routine_type='FUNCTION' and routine_name='%s') "+\
-				"drop function %s",
+			(	self.functions,	
+				"if exists (select * from information_schema.routines where routine_schema='dbo' "+\
+					"and routine_type='FUNCTION' and routine_name='%s') "+\
+					"drop function %s",
 				"Functions"
 			),
 
-			(self.views,		None,	"Views"),
+			(	self.views,	None, "Views"),
 			
-			(self.triggers,		"if exists (select * from sysobjects o where type='TR' and type='%s')"+\
-				"drop trigger %s",
+			(	self.triggers,
+				"if exists (select * from sysobjects o where type='TR' and name='%s')"+\
+					"drop trigger %s",
 				"Triggers"
 			)
 		)
@@ -299,15 +303,13 @@ class Restore(DumpRestoreBase):
 			* objs - list of objects to be restored
 		'''	
 		logger=_getLogger('_import_object')
-		crappy_backslash=re.compile(r'(\[.*?)\x92(.*?])')
 		for v in objs:
-			logger.debug('Recreating object %s',v[0])
+			logger.debug('Recreating object %s',v.name)
 			with transaction(self.con):
 				if check_and_delete:
-					self.con.execute(check_and_delete % (v[0],v[0]))
+					self.con.execute(check_and_delete % (v.name,v.name))
 
-				sql=v[1]
-				self.con.execute(sql)
+				self.con.execute(v.defintion)
 
 
 
