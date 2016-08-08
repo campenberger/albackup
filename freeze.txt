@@ -9,3 +9,4 @@ pdoc==0.3.2
 xmlrunner==1.7.7
 Mock==2.0.0
 coverage=4.2
+pyflakes==1.2.3

@@ -5,6 +5,7 @@ from datetime import datetime
 import logging
 import pytz
 
+
 def _getLogger(*names):
     ''' Utility method that returns a logger prefixed with 'albackup'
         and all given names, separate by '.'. For example
@@ -15,6 +16,7 @@ def _getLogger(*names):
     '''
     name='.'.join(['albackup']+[n for n in names])
     return logging.getLogger(name)
+
 
 def loggerFactory(name):
     ''' Helper to generate the getLogger method for a module, where

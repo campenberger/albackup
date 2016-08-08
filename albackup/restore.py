@@ -1,11 +1,9 @@
-import logging
 import sqlalchemy as sa
 import os
-import re
-from sqlalchemy.util import pickle,byte_buffer
-from sqlalchemy.dialects.mssql import NTEXT,NVARCHAR
+from sqlalchemy.util import pickle
+from sqlalchemy.dialects.mssql import NTEXT
 
-from . import ObjectDef,DumpRestoreBase,loggerFactory,transaction
+from . import DumpRestoreBase,loggerFactory,transaction
 
 
 _getLogger=loggerFactory('restore')
@@ -251,6 +249,7 @@ class Restore(DumpRestoreBase):
 		try:
 			self.con.execute(table.insert(),rows)
 		except: # pragma: nocover
+			logger=_getLogger('_insertBlock')
 			logger.exception("Error inserting rows into %s:",table.name)
 			logger.error("Dumping rows:")
 			for r in rows:

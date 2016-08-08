@@ -86,18 +86,15 @@ class ImportCheckFailed(Exception):
 @task()
 def importchecker():
     ''' Checks the python sources for unneccessary imports '''
-    importchecker=sh.Command(os.path.join(os.path.dirname(sys.executable),'importchecker'))
-    results="".join(
-        importchecker("albackup",_iter=True),
-        importchecker("build.py",_iter=True),
-        importchecker("test_all.py",_iter=True),
-    )
-    if len(results)>0:
-        print >>sys.stderr,"Found unneccessary imports"
-        print >>sys.stderr,results
-        raise ImportCheckFailed
-    else:
-        print "No unneccessary imports found"
+    from pyflakes.scripts.pyflakes import main
+
+    try:
+        main(args=['albackup'])
+    except SystemExit,ex:
+        if ex.message:
+            raise
+        else:
+            print "pyflakes found not issues"
 
 
 @task()

@@ -1,12 +1,8 @@
 import sqlalchemy as sa
-import logging
 import os
 import pytz
 import re
-import sqlalchemy.sql.expression as ex
 from datetime import datetime
-from sqlalchemy.sql import func
-from collections import namedtuple
 from sqlalchemy.util import pickle,byte_buffer
 
 from . import ObjectDef,loggerFactory,transaction,execute_resultset,DumpRestoreBase

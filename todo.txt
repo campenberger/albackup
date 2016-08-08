@@ -1,5 +1,4 @@
 - test crystal and logi with Sandbox
-- build and unit test
 - compression into an archives
 
 
